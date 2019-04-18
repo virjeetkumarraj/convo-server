@@ -267,6 +267,7 @@ func startClientMode() {
 		if message == "exit" {
 			break
 		}
+		fmt.Println("Sending " + strings.TrimRight(message, "\r\n"))
 		connection.Write([]byte(strings.TrimRight(message, "\r\n")))
 	}
 }
