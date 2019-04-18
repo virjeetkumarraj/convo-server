@@ -194,7 +194,13 @@ func (client *Client) sendStatus(cm *ClientManager, id int) {
 
 func startServerMode() {
 	fmt.Println("Starting server...")
-	listener, error := net.Listen("tcp", ":30000")
+	osPort := os.Getenv("PORT")
+	if osPort == "" {
+		osPort = ":30000"
+	} else {
+		osPort = ":" + osPort
+	}
+	listener, error := net.Listen("tcp", osPort)
 	if error != nil {
 		fmt.Println(error)
 		return
