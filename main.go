@@ -251,9 +251,15 @@ func (client *Client) receive() {
 	}
 }
 
-func startClientMode() {
+func startClientMode(local bool) {
 	fmt.Println("Starting client...")
-	connection, error := net.Dial("tcp", "radiant-spire-21595.herokuapp.com:80")
+	host := ""
+	if local {
+		host = "localhost:30000"
+	} else {
+		host = "radiant-spire-21595.herokuapp.com:80"
+	}
+	connection, error := net.Dial("tcp", host)
 	if error != nil {
 		fmt.Println(error)
 		return
@@ -274,10 +280,11 @@ func startClientMode() {
 
 func main() {
 	flagMode := flag.String("mode", "server", "start in client or server mode")
+	flagLocal := flag.Bool("local", false, "local or not")
 	flag.Parse()
 	if strings.ToLower(*flagMode) == "server" {
 		startServerMode()
 	} else {
-		startClientMode()
+		startClientMode(*flagLocal)
 	}
 }
