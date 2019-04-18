@@ -200,6 +200,7 @@ func startServerMode() {
 	} else {
 		osPort = ":" + osPort
 	}
+	fmt.Println("Listening on port " + osPort)
 	listener, error := net.Listen("tcp", osPort)
 	if error != nil {
 		fmt.Println(error)
