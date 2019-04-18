@@ -28,3 +28,9 @@
 [prune]
   go-tests = true
   unused-packages = true
+
+[metadata.heroku]
+  root-package = "github.com/ngavinsir/convo-server"
+  install = [ "./cmd/...", "./..." ]
+  ensure = "false"
+  additional-tools = ["github.com/golang-migrate/migrate"]  
