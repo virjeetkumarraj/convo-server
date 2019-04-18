@@ -253,7 +253,7 @@ func (client *Client) receive() {
 
 func startClientMode() {
 	fmt.Println("Starting client...")
-	connection, error := net.Dial("tcp", "localhost:30000")
+	connection, error := net.Dial("tcp", "radiant-spire-21595.herokuapp.com:80")
 	if error != nil {
 		fmt.Println(error)
 		return
