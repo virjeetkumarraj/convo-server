@@ -108,6 +108,7 @@ func (manager *ClientManager) readStatus() {
 func (manager *ClientManager) receive(client *Client) {
 	for {
 		message := make([]byte, 4096)
+		fmt.Println("ready to receive msg from " + client.name)
 		length, err := client.socket.Read(message)
 		if err != nil {
 			manager.unregister <- client
@@ -258,8 +259,9 @@ func startClientMode(local bool) {
 	if local {
 		host = "localhost:30000"
 	} else {
-		host = "radiant-spire-21595.herokuapp.com:80"
+		host = "convo.southeastasia.azurecontainer.io:30000"
 	}
+	fmt.Println("Connect to " + host)
 	connection, error := net.Dial("tcp", host)
 	if error != nil {
 		fmt.Println(error)
