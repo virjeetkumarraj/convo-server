@@ -75,18 +75,22 @@ func (manager *ClientManager) start() {
 				fmt.Println(connection.getIdentifier() + " has disconnected!")
 			}
 		case b := <-manager.broadcast:
+			count := 0
 			for connection := range manager.clients {
 				if b.sender == connection {
-					continue
+				} else {
+					select {
+					case connection.data <- []byte("/msg " + b.sender.getIdentifier() + " " + string(b.msg)):
+						count++
+					default:
+						manager.unregister <- connection
+					}
 				}
-				select {
-				case connection.data <- []byte("/msg " + b.sender.getIdentifier() + " " + string(b.msg)):
-					b.sender.sendStatus(manager, 1)
-				default:
-					b.sender.sendStatus(manager, 2)
-					close(connection.data)
-					delete(manager.clients, connection)
-				}
+			}
+			if count < 1 {
+				b.sender.sendStatus(manager, 2)
+			} else {
+				b.sender.sendStatus(manager, 1)
 			}
 		case pc := <-manager.pc:
 			count := 0
@@ -116,7 +120,7 @@ func (manager *ClientManager) readStatus() {
 		case status := <-manager.status:
 			select {
 			case status.sender.data <- []byte("/status " + strconv.Itoa(status.id)):
-				//fmt.Println("Sending status " + strconv.Itoa(status.id) + " to " + status.sender.getIdentifier())
+				fmt.Println("Sending status " + strconv.Itoa(status.id) + " to " + status.sender.getIdentifier())
 			default:
 				close(status.sender.data)
 				delete(manager.clients, status.sender)
@@ -166,6 +170,16 @@ func (manager *ClientManager) receive(client *Client) {
 				}
 				name := args[1]
 				pass := args[2]
+				sameName := false
+				for connection := range manager.clients {
+					if connection.name == name {
+						sameName = true
+					}
+				}
+				if sameName {
+					client.sendStatus(manager, 5)
+					continue
+				}
 				var acc map[string]map[string]interface{}
 				json.Unmarshal(getAccounts(), &acc)
 				if acc["users"][name] != pass {
