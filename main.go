@@ -2,8 +2,10 @@ package main
 
 import (
 	"bufio"
+	"encoding/json"
 	"flag"
 	"fmt"
+	"io/ioutil"
 	"net"
 	"os"
 	"strconv"
@@ -41,18 +43,36 @@ type Client struct {
 	name   string
 }
 
+func (c *Client) getIdentifier() string {
+	if c.name != "" {
+		return c.name
+	}
+	return c.socket.RemoteAddr().String()
+}
+
+func getAccounts() []byte {
+	file, _ := os.Open("account.json")
+	defer file.Close()
+	data, _ := ioutil.ReadAll(file)
+	return data
+}
+
+func updateAccounts(data []byte) {
+	ioutil.WriteFile("./account.json", data, 0644)
+}
+
 func (manager *ClientManager) start() {
 	go manager.readStatus()
 	for {
 		select {
 		case connection := <-manager.register:
 			manager.clients[connection] = true
-			fmt.Println(connection.name + " is connected!")
+			fmt.Println(connection.getIdentifier() + " is connected!")
 		case connection := <-manager.unregister:
 			if _, ok := manager.clients[connection]; ok {
 				close(connection.data)
 				delete(manager.clients, connection)
-				fmt.Println(connection.name + " has disconnected!")
+				fmt.Println(connection.getIdentifier() + " has disconnected!")
 			}
 		case b := <-manager.broadcast:
 			for connection := range manager.clients {
@@ -60,7 +80,7 @@ func (manager *ClientManager) start() {
 					continue
 				}
 				select {
-				case connection.data <- []byte("/msg " + b.sender.name + " " + string(b.msg)):
+				case connection.data <- []byte("/msg " + b.sender.getIdentifier() + " " + string(b.msg)):
 					b.sender.sendStatus(manager, 1)
 				default:
 					b.sender.sendStatus(manager, 2)
@@ -95,8 +115,8 @@ func (manager *ClientManager) readStatus() {
 		select {
 		case status := <-manager.status:
 			select {
-			case status.sender.data <- []byte("\\x01 " + strconv.Itoa(status.id)):
-				fmt.Println("Sending status " + strconv.Itoa(status.id) + " to " + status.sender.name)
+			case status.sender.data <- []byte("/status " + strconv.Itoa(status.id)):
+				//fmt.Println("Sending status " + strconv.Itoa(status.id) + " to " + status.sender.getIdentifier())
 			default:
 				close(status.sender.data)
 				delete(manager.clients, status.sender)
@@ -108,7 +128,7 @@ func (manager *ClientManager) readStatus() {
 func (manager *ClientManager) receive(client *Client) {
 	for {
 		message := make([]byte, 4096)
-		fmt.Println("ready to receive msg from " + client.name)
+		fmt.Println("ready to receive msg from " + client.getIdentifier())
 		length, err := client.socket.Read(message)
 		if err != nil {
 			manager.unregister <- client
@@ -118,19 +138,46 @@ func (manager *ClientManager) receive(client *Client) {
 		if length > 0 {
 			msg := string(message[:length])
 			msg = strings.TrimSpace(msg)
-			fmt.Println("RECEIVED from " + client.name + ": " + msg)
+			fmt.Println("RECEIVED from " + client.getIdentifier() + " : " + msg)
 			args := strings.Split(msg, " ")
-			if strings.HasPrefix(msg, "/connect") {
+			if strings.HasPrefix(msg, "/register") {
 				if len(args) < 3 {
 					client.sendStatus(manager, 3)
 					continue
 				}
-				name := strings.Join(args[2:], " ")
+				name := args[1]
+				pass := args[2]
+				var acc map[string]map[string]interface{}
+				json.Unmarshal(getAccounts(), &acc)
+				fmt.Println(acc["users"][name])
+				if acc["users"][name] != nil {
+					client.sendStatus(manager, 5)
+					continue
+				}
+				acc["users"][name] = pass
+				result, _ := json.Marshal(acc)
+				updateAccounts(result)
+				client.sendStatus(manager, 4)
+				fmt.Println("client " + client.getIdentifier() + " registered with username " + name)
+			} else if strings.HasPrefix(msg, "/login") {
+				if len(args) < 3 {
+					client.sendStatus(manager, 3)
+					continue
+				}
+				name := args[1]
+				pass := args[2]
+				var acc map[string]map[string]interface{}
+				json.Unmarshal(getAccounts(), &acc)
+				if acc["users"][name] != pass {
+					client.sendStatus(manager, 5)
+					continue
+				}
+				client.sendStatus(manager, 4)
 				client.name = name
 				manager.register <- client
 			} else if strings.HasPrefix(msg, "/broadcast") {
 				if client.name == "" {
-					client.sendStatus(manager, 4)
+					client.sendStatus(manager, 5)
 					continue
 				}
 				if len(args) < 2 {
@@ -141,7 +188,7 @@ func (manager *ClientManager) receive(client *Client) {
 					[]byte(strings.TrimPrefix(msg, "/broadcast "))}
 			} else if strings.HasPrefix(msg, "/chat") {
 				if client.name == "" {
-					client.sendStatus(manager, 4)
+					client.sendStatus(manager, 5)
 					continue
 				}
 				if len(args) < 3 {
@@ -151,9 +198,9 @@ func (manager *ClientManager) receive(client *Client) {
 				receiverName := args[1]
 				manager.pc <- &PersonalChat{sender: client, receiver: receiverName,
 					msg: []byte(strings.Join(args[2:], " "))}
-			} else if msg == "/users" {
+			} else if msg == "/list" {
 				if client.name == "" {
-					client.sendStatus(manager, 4)
+					client.sendStatus(manager, 5)
 					continue
 				}
 				var sb strings.Builder
@@ -183,7 +230,7 @@ func (manager *ClientManager) send(client *Client) {
 			if !ok {
 				return
 			}
-			fmt.Println("Sending to " + client.name + " : " + string(message))
+			fmt.Println("Sending to " + client.getIdentifier() + " : " + string(message))
 			client.socket.Write(message)
 		}
 	}
@@ -221,8 +268,15 @@ func startServerMode() {
 		for {
 			connection, err := listener.Accept()
 			if err != nil {
+				fmt.Println("Socket error:")
 				fmt.Println(error)
 				return
+			}
+			for c := range manager.clients {
+				if connection.RemoteAddr().String() == c.socket.RemoteAddr().String() {
+					manager.unregister <- c
+					c.socket.Close()
+				}
 			}
 			client := &Client{socket: connection, data: make(chan []byte), name: ""}
 			go manager.receive(client)
