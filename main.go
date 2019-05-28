@@ -80,7 +80,7 @@ func (manager *ClientManager) start() {
 				if b.sender == connection {
 				} else {
 					select {
-					case connection.data <- []byte("/msg " + b.sender.getIdentifier() + " " + string(b.msg)):
+					case connection.data <- []byte("/msg " + b.sender.name + " " + string(b.msg)):
 						count++
 					default:
 						manager.unregister <- connection
@@ -210,6 +210,10 @@ func (manager *ClientManager) receive(client *Client) {
 					continue
 				}
 				receiverName := args[1]
+				if client.name == receiverName {
+					client.sendStatus(manager, 1)
+					continue
+				}
 				manager.pc <- &PersonalChat{sender: client, receiver: receiverName,
 					msg: []byte(strings.Join(args[2:], " "))}
 			} else if msg == "/list" {
