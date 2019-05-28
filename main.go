@@ -153,7 +153,7 @@ func (manager *ClientManager) receive(client *Client) {
 				pass := args[2]
 				var acc map[string]map[string]interface{}
 				json.Unmarshal(getAccounts(), &acc)
-				fmt.Println(acc["users"][name])
+				//fmt.Println(acc["users"][name])
 				if acc["users"][name] != nil {
 					client.sendStatus(manager, 5)
 					continue
